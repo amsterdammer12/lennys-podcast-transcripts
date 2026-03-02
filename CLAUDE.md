@@ -4,31 +4,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a static content archive containing 269 episode transcripts from Lenny's Podcast, with an AI-generated topic index for easy discovery.
+This is a static content archive containing **303 episode transcripts** from Lenny's Podcast, with an AI-generated topic index (88 topics) for discovery. There is no build system, test suite, or application code — the repository is purely content (markdown) plus one Bash script for index generation.
 
 ## Structure
 
 ```
-├── episodes/
+├── CLAUDE.md                        # This file — AI assistant guidance
+├── README.md                        # Project overview and usage docs
+├── episodes/                        # 303 guest directories (~26 MB total)
 │   └── {guest-name}/
-│       └── transcript.md    # YAML frontmatter + transcript content
-├── index/
-│   ├── README.md            # Main entry point with topic links
-│   └── {topic}.md           # Individual topic files (e.g., product-management.md)
+│       └── transcript.md            # YAML frontmatter + full transcript
+├── index/                           # AI-generated topic index (~262 KB)
+│   ├── README.md                    # Master topic listing with episode counts
+│   └── {topic}.md                   # 88 topic files (e.g., product-management.md)
 └── scripts/
-    └── build-index.sh       # Script to regenerate the index
+    └── build-index.sh               # Index generator (requires Claude CLI + jq)
 ```
+
+### Naming conventions
+
+- Episode directories use lowercase, hyphenated guest names: `brian-chesky`, `adam-fishman`
+- Some guests have multiple episodes with suffixed directories: `wes-kao`, `wes-kao-20`
+- Topic index files use lowercase, hyphenated topic names: `product-management.md`, `ab-testing.md`
 
 ## Transcript Format
 
-Each transcript.md contains:
-- **YAML frontmatter**: guest, title, youtube_url, video_id, description, duration_seconds, duration, view_count, channel
-- **Transcript content**: Timestamped speaker dialogue
+Each `episodes/{guest}/transcript.md` has two parts:
+
+### 1. YAML Frontmatter (between `---` delimiters)
+
+Fields:
+- `guest` — Guest name(s)
+- `title` — Full episode title
+- `youtube_url` — Link to the YouTube video
+- `video_id` — YouTube video identifier
+- `description` — Episode description (may be multi-line)
+- `duration_seconds` — Episode length as a float
+- `duration` — Human-readable duration (e.g., `'1:05:46'`)
+- `view_count` — Views at time of archival
+- `channel` — Always `Lenny's Podcast`
+- `keywords` — List of topic tags (e.g., `product-market fit`, `growth`, `retention`)
+
+### 2. Transcript Content
+
+After the closing `---`, the transcript follows with:
+- An H1 heading matching the episode title
+- An H2 `## Transcript` section
+- Timestamped speaker dialogue: `Speaker Name (HH:MM:SS):`
+
+File sizes range from ~64 lines (short teasers) to ~2,400 lines (long interviews). Most are 400–800 lines.
 
 ## Index
 
-The `index/` folder contains AI-generated keyword tags for each episode:
-- Topic files (e.g., `product-management.md`) - Episodes grouped by topic keyword
+The `index/` directory contains 88 AI-generated topic files plus a `README.md` entry point.
+
+- **`index/README.md`** — Lists all topics with episode counts (last generated: 2026-01-14, covering 269 of 303 episodes)
+- **Topic files** — Each lists episodes tagged with that topic as markdown links back to transcripts
+
+Largest topics: Product Management (142 episodes), Leadership (73), Entrepreneurship (52), Product Strategy (52), Product Development (46).
+
+**Note:** 34 episodes added after the last index build are not yet indexed. Run `./scripts/build-index.sh` to index them.
 
 ## Working with Large Transcript Files
 
@@ -56,10 +91,10 @@ Read file_path="..." offset=1 limit=500    # First chunk
 Read file_path="..." offset=500 limit=500  # Second chunk
 ```
 
-### 4. Use Task tool with Explore agent
+### 4. Use Agent tool with Explore agent
 For research across multiple transcripts:
 ```
-Task subagent_type="Explore" prompt="Find insights about X across transcripts"
+Agent subagent_type="Explore" prompt="Find insights about X across transcripts"
 ```
 
 ### 5. Handle persisted output
@@ -73,4 +108,18 @@ Read that file to access the full content.
 ./scripts/build-index.sh
 ```
 
-This calls Claude CLI for each episode to generate keywords. The script is idempotent - it skips episodes already present in keyword files, so it can be run multiple times safely.
+**Requirements:** Claude CLI (`claude` command) and `jq` must be available on PATH.
+
+**How it works:**
+1. Iterates over every `episodes/*/transcript.md`
+2. Skips episodes already referenced in existing topic files (idempotent)
+3. Sends each transcript to Claude Sonnet to extract 4–6 broad topic keywords as JSON
+4. Appends episodes to the corresponding `index/{topic}.md` files, creating new files as needed
+5. Regenerates `index/README.md` with updated topic counts
+
+The script is idempotent and incremental — it can be interrupted and safely rerun. It includes a 1-second delay between API calls to avoid rate limiting.
+
+**Environment variables:**
+- `EPISODES_DIR` — Episode source directory (default: `episodes`)
+- `OUTPUT_DIR` — Index output directory (default: `index`)
+- `TEMP_DIR` — Temporary working directory (default: auto-created via `mktemp`)
